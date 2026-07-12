@@ -1,0 +1,980 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: The Flo Blueprint™ API — TymFlo Business Intelligence Assessment Platform
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: leads
+    description: Lead capture and assessment submissions
+  - name: checkout
+    description: Stripe checkout and payment operations
+  - name: admin
+    description: Internal admin endpoints — requires Clerk auth + ADMIN_EMAILS allowlist
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /leads:
+    post:
+      operationId: submitLead
+      tags: [leads]
+      summary: Submit a lead with assessment results
+      description: Captures lead contact info and full assessment results, stores in DB and syncs to Google Sheets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadInput"
+      responses:
+        "201":
+          description: Lead submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [checkout]
+      summary: List purchasable services with live Stripe prices
+      description: Returns the three purchasable TymFlo services with their current prices fetched from Stripe (falls back to configured defaults if Stripe is unavailable)
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /checkout:
+    post:
+      operationId: createCheckoutSession
+      tags: [checkout]
+      summary: Create a Stripe Checkout session
+      description: Creates a Stripe Checkout session for a purchasable TymFlo service and returns the redirect URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /checkout/debrief:
+    post:
+      operationId: createDebriefCheckoutSession
+      tags: [checkout]
+      summary: Create a Stripe Checkout session for the $197 Executive Debrief
+      description: Creates a Stripe Checkout session for the Flo Blueprint Executive Debrief and returns the redirect URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebriefCheckoutInput"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /debrief/status:
+    get:
+      operationId: getDebriefStatus
+      tags: [checkout]
+      summary: Check payment status for a debrief checkout session
+      parameters:
+        - name: session_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebriefStatus"
+        "402":
+          description: Payment not completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "400":
+          description: Missing session_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /track:
+    post:
+      operationId: trackFunnelEvent
+      tags: [leads]
+      summary: Track a funnel event
+      description: Logs a client-side funnel event (optionally linked to a lead) for analytics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackInput"
+      responses:
+        "200":
+          description: Event logged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                  - ok
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /debrief/focus:
+    post:
+      operationId: saveDebriefFocus
+      tags: [checkout]
+      summary: Save the selected focus area for an Executive Debrief
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebriefFocusInput"
+      responses:
+        "200":
+          description: Focus saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /debrief/booking:
+    patch:
+      operationId: saveDebriefBooking
+      tags: [checkout]
+      summary: Save booking date and send appointment confirmation email
+      description: >
+        Persists the TidyCal booking date for a debrief lead and fires the
+        appointment confirmation email (Email 2). Idempotent — email is only
+        sent once per lead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebriefBookingInput"
+      responses:
+        "200":
+          description: Booking saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Lead not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads:
+    get:
+      operationId: adminListLeads
+      tags: [admin]
+      summary: List all leads (admin only)
+      description: Returns all leads for the admin list view. Requires Clerk auth + admin allowlist.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminLeadSummary"
+                required:
+                  - leads
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden — not in admin allowlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads/{id}:
+    get:
+      operationId: adminGetLead
+      tags: [admin]
+      summary: Get full lead detail (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Full lead record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lead:
+                    type: object
+                    additionalProperties: true
+                required:
+                  - lead
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Lead not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads/{id}/summary:
+    patch:
+      operationId: adminSaveDebriefSummary
+      tags: [admin]
+      summary: Save debrief summary form data and status (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSummaryInput"
+      responses:
+        "200":
+          description: Summary saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  debriefSummaryStatus:
+                    type: ["string", "null"]
+                required:
+                  - success
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads/{id}/notes:
+    patch:
+      operationId: adminSaveInternalNotes
+      tags: [admin]
+      summary: Save internal notes for a lead (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminNotesInput"
+      responses:
+        "200":
+          description: Notes saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads/{id}/recommendation:
+    patch:
+      operationId: adminSaveRecommendation
+      tags: [admin]
+      summary: Save after-debrief service recommendation (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRecommendationInput"
+      responses:
+        "200":
+          description: Recommendation saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/leads/{id}/finalize:
+    post:
+      operationId: adminFinalizeDebriefSummary
+      tags: [admin]
+      summary: Finalize and mark debrief summary as sent (admin only)
+      description: >
+        Marks the debrief summary status as 'sent', records the delivery timestamp,
+        and sets lead_stage to 'debrief_complete'. PDF generation is handled client-side
+        (browser print API). Email delivery stub — Task #20 will wire the actual email.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Summary finalized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  sentAt:
+                    type: string
+                    description: ISO 8601 timestamp of when the summary was finalized
+                required:
+                  - success
+                  - sentAt
+        "400":
+          description: No summary data to finalize
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Lead not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Clerk session token
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    AssessmentAnswers:
+      type: object
+      description: Raw answers from each assessment question
+      properties:
+        q1_stage:
+          type: string
+        q2_size:
+          type: string
+        q3_challenge:
+          type: string
+        q4_friction:
+          type: string
+        q5_impact:
+          type: string
+        q6_fix:
+          type: string
+        q7_timeline:
+          type: string
+      required:
+        - q1_stage
+        - q2_size
+        - q3_challenge
+        - q4_friction
+        - q5_impact
+        - q6_fix
+        - q7_timeline
+
+    CategoryScores:
+      type: object
+      description: Scored dimensions of the business assessment
+      properties:
+        strategy:
+          type: integer
+        marketing:
+          type: integer
+        operations:
+          type: integer
+        customerExperience:
+          type: integer
+        aiReadiness:
+          type: integer
+        leadershipCapacity:
+          type: integer
+        execution:
+          type: integer
+      required:
+        - strategy
+        - marketing
+        - operations
+        - customerExperience
+        - aiReadiness
+        - leadershipCapacity
+        - execution
+
+    LeadInput:
+      type: object
+      properties:
+        clerkUserId:
+          type: ["string", "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        company:
+          type: string
+        website:
+          type: ["string", "null"]
+        role:
+          type: string
+        industry:
+          type: ["string", "null"]
+        annualRevenue:
+          type: ["string", "null"]
+        consentToContact:
+          type: boolean
+        # Assessment results
+        answers:
+          $ref: "#/components/schemas/AssessmentAnswers"
+        categoryScores:
+          $ref: "#/components/schemas/CategoryScores"
+        businessHealthScore:
+          type: integer
+        primaryConstraint:
+          type: string
+        floProfile:
+          type: string
+        confidencePercentage:
+          type: integer
+        estimatedImpact:
+          type: string
+        recommendedService:
+          type: string
+        # UTM / tracking
+        eventSource:
+          type: ["string", "null"]
+        qrCodeId:
+          type: ["string", "null"]
+        campaign:
+          type: ["string", "null"]
+        utmSource:
+          type: ["string", "null"]
+        utmMedium:
+          type: ["string", "null"]
+        utmCampaign:
+          type: ["string", "null"]
+      required:
+        - firstName
+        - lastName
+        - email
+        - company
+        - role
+        - consentToContact
+        - answers
+        - categoryScores
+        - businessHealthScore
+        - primaryConstraint
+        - floProfile
+        - confidencePercentage
+        - estimatedImpact
+        - recommendedService
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        company:
+          type: string
+        role:
+          type: string
+        floProfile:
+          type: string
+        businessHealthScore:
+          type: integer
+        primaryConstraint:
+          type: string
+        recommendedService:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - email
+        - company
+        - role
+        - floProfile
+        - businessHealthScore
+        - primaryConstraint
+        - recommendedService
+        - createdAt
+
+    ProductItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Service identifier (e.g. "executive-growth-strategy")
+        name:
+          type: string
+          description: Display name of the service
+        category:
+          type: string
+          description: Category label (e.g. "Strategy")
+        priceCents:
+          type: integer
+          description: Price in US cents
+        priceDisplay:
+          type: string
+          description: Formatted price string (e.g. "$997")
+      required:
+        - id
+        - name
+        - category
+        - priceCents
+        - priceDisplay
+
+    ProductList:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductItem"
+      required:
+        - products
+
+    CheckoutInput:
+      type: object
+      properties:
+        serviceId:
+          type: string
+          description: The service identifier (e.g. "executive-growth-strategy")
+        leadId:
+          type: ["string", "null"]
+          description: Optional lead ID to associate with the purchase
+        successUrl:
+          type: string
+          description: URL to redirect to after successful payment
+        cancelUrl:
+          type: string
+          description: URL to redirect to if the user cancels
+      required:
+        - serviceId
+        - successUrl
+        - cancelUrl
+
+    CheckoutSession:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Stripe Checkout hosted URL to redirect the user to
+        sessionId:
+          type: string
+          description: Stripe session ID
+      required:
+        - url
+        - sessionId
+
+    DebriefCheckoutInput:
+      type: object
+      properties:
+        leadId:
+          type: ["string", "null"]
+          description: Lead ID to associate with the purchase
+        clerkUserId:
+          type: ["string", "null"]
+          description: Clerk user ID
+        eventSource:
+          type: ["string", "null"]
+          description: Event source for tracking
+        primaryConstraint:
+          type: ["string", "null"]
+          description: Primary business constraint from the assessment (stored in Stripe metadata)
+        campaign:
+          type: ["string", "null"]
+          description: Campaign tag for tracking (stored in Stripe metadata)
+      required: []
+
+    DebriefStatus:
+      type: object
+      properties:
+        paid:
+          type: boolean
+        leadId:
+          type: ["string", "null"]
+      required:
+        - paid
+
+    DebriefFocusInput:
+      type: object
+      properties:
+        leadId:
+          type: string
+          description: Lead ID to update
+        selectedFocus:
+          type: string
+          description: Selected focus area (clarity|qualified_leads|save_time|implementation)
+        sessionId:
+          type: string
+          description: Stripe checkout session ID — used to verify payment ownership before updating the lead
+      required:
+        - leadId
+        - selectedFocus
+        - sessionId
+
+    TrackInput:
+      type: object
+      properties:
+        event:
+          type: string
+          description: Funnel event name (e.g. debrief_offer_viewed, purchase_clicked)
+        leadId:
+          type: ["string", "null"]
+          description: Lead ID to associate the event with (if known)
+      required:
+        - event
+
+    AdminLeadSummary:
+      type: object
+      description: Lead record as returned in the admin list view
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        company:
+          type: string
+        role:
+          type: string
+        primaryConstraint:
+          type: string
+        floProfile:
+          type: string
+        businessHealthScore:
+          type: integer
+        selectedFocus:
+          type: ["string", "null"]
+        paymentStatus:
+          type: ["string", "null"]
+        leadStage:
+          type: ["string", "null"]
+        debriefBookingDate:
+          type: ["string", "null"]
+        debriefSummaryStatus:
+          type: ["string", "null"]
+        eventSource:
+          type: ["string", "null"]
+        campaign:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - email
+        - company
+        - role
+        - primaryConstraint
+        - floProfile
+        - businessHealthScore
+        - createdAt
+
+    DebriefBookingInput:
+      type: object
+      properties:
+        leadId:
+          type: string
+          description: Lead ID (integer as string)
+        bookingDate:
+          type: string
+          description: ISO 8601 datetime of the booked session
+        sessionId:
+          type: string
+          description: Stripe checkout session ID — used to verify payment ownership
+      required:
+        - leadId
+        - bookingDate
+        - sessionId
+
+    AdminSummaryInput:
+      type: object
+      properties:
+        summaryData:
+          type: object
+          description: All debrief summary form fields as a JSON object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [draft, in_review, finalized, sent]
+      required: []
+
+    AdminNotesInput:
+      type: object
+      properties:
+        notes:
+          type: ["string", "null"]
+      required: []
+
+    AdminRecommendationInput:
+      type: object
+      properties:
+        recommendedService:
+          type: string
+        recommendationData:
+          type: object
+          description: Recommendation details (reason, amount, links, follow-up date)
+          additionalProperties: true
+      required: []
