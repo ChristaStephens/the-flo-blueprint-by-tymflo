@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "The Flo Blueprint™"
+version = "1.0.0"
+id = "artifacts/flo-blueprint"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23251
+
+[services.development]
+run = "pnpm --filter @workspace/flo-blueprint run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/flo-blueprint", "run", "build" ]
+publicDir = "artifacts/flo-blueprint/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23251"
+BASE_PATH = "/"
